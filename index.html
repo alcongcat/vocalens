@@ -277,7 +277,7 @@ let links = JSON.parse(localStorage.getItem('vl_links') || '[]');
 const GROQ_API_KEY = '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';
 // ═══════════════════════════════════════════
 // ☁️ PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const SYNC_URL = 'https://script.google.com/macros/s/AKfycbz0lOQe1GdVo6VSdQd94NyW6t1r9tW9aj3BxPCsjMcmrEdyDJHdgt_iKgZZY8iAWk0T4A/exec';
+const SYNC_URL = 'YOUR_SCRIPT_URL_HERE';
 // ═══════════════════════════════════════════
 let currentFilter = 'all';
 let quizType = 'definition';
@@ -301,6 +301,7 @@ function incrementRequestCount() {
   const count = getRequestCount() + 1;
   localStorage.setItem('vl_requests', JSON.stringify({date: today, count}));
   updateReqCount();
+  scheduleSyncPush();
 }
 
 function updateReqCount() {
@@ -689,9 +690,10 @@ function scheduleSyncPush() {
 async function pushToSheet() {
   if (!SYNC_URL || SYNC_URL === 'YOUR_SCRIPT_URL_HERE') return;
   try {
+    const requests = JSON.parse(localStorage.getItem('vl_requests') || '{"date":"","count":0}');
     await fetch(SYNC_URL, {
       method: 'POST',
-      body: JSON.stringify({ vocab, links }),
+      body: JSON.stringify({ vocab, links, requests }),
       headers: { 'Content-Type': 'text/plain' }
     });
     setSyncStatus('✓ synced', false);
@@ -705,14 +707,45 @@ async function pullFromSheet() {
   try {
     const res = await fetch(SYNC_URL + '?t=' + Date.now());
     const data = await res.json();
-    if (data.vocab && data.vocab.length > vocab.length) {
-      vocab = data.vocab;
-      links = data.links || links;
-      localStorage.setItem('vl_vocab', JSON.stringify(vocab));
-      localStorage.setItem('vl_links', JSON.stringify(links));
-      updateCount();
-      showToast(`☁️ Synced — ${vocab.length} words loaded`);
+
+    let changed = false;
+
+    // Sync vocab — merge remote + local, keep all unique by id
+    if (data.vocab && data.vocab.length) {
+      const localIds = new Set(vocab.map(v => v.id));
+      const remoteOnly = data.vocab.filter(v => !localIds.has(v.id));
+      if (remoteOnly.length) {
+        vocab = [...vocab, ...remoteOnly];
+        localStorage.setItem('vl_vocab', JSON.stringify(vocab));
+        updateCount();
+        changed = true;
+      }
     }
+
+    // Sync links — always merge, deduplicate by URL
+    if (data.links && data.links.length) {
+      const localUrls = new Set(links.map(l => l.url));
+      const remoteOnly = data.links.filter(l => !localUrls.has(l.url));
+      if (remoteOnly.length) {
+        links = [...links, ...remoteOnly];
+        localStorage.setItem('vl_links', JSON.stringify(links));
+        changed = true;
+      }
+    }
+
+    // Sync request count — take higher count for today
+    if (data.requests) {
+      const today = new Date().toDateString();
+      const local = JSON.parse(localStorage.getItem('vl_requests') || '{"date":"","count":0}');
+      const remoteCount = data.requests.date === today ? data.requests.count : 0;
+      const localCount = local.date === today ? local.count : 0;
+      if (remoteCount > localCount) {
+        localStorage.setItem('vl_requests', JSON.stringify({ date: today, count: remoteCount }));
+        updateReqCount();
+      }
+    }
+
+    if (changed) showToast(`☁️ Synced — ${vocab.length} words, ${links.length} links`);
   } catch(e) {}
 }
 
@@ -728,22 +761,39 @@ async function syncData() {
     // Pull first, merge, then push
     const res = await fetch(SYNC_URL + '?t=' + Date.now());
     const remote = await res.json();
-    if (remote.vocab) {
-      const remoteIds = new Set(remote.vocab.map(v => v.id));
-      const localOnly = vocab.filter(v => !remoteIds.has(v.id));
-      vocab = [...remote.vocab, ...localOnly];
-      links = remote.links || links;
-      localStorage.setItem('vl_vocab', JSON.stringify(vocab));
-      localStorage.setItem('vl_links', JSON.stringify(links));
-      updateCount();
-    }
+    // Merge vocab
+    const remoteIds = new Set((remote.vocab || []).map(v => v.id));
+    const localOnlyVocab = vocab.filter(v => !remoteIds.has(v.id));
+    vocab = [...(remote.vocab || []), ...localOnlyVocab];
+
+    // Merge links — deduplicate by URL
+    const remoteLinks = remote.links || [];
+    const remoteUrls = new Set(remoteLinks.map(l => l.url));
+    const localOnlyLinks = links.filter(l => !remoteUrls.has(l.url));
+    links = [...remoteLinks, ...localOnlyLinks];
+
+    localStorage.setItem('vl_vocab', JSON.stringify(vocab));
+    localStorage.setItem('vl_links', JSON.stringify(links));
+    updateCount();
+    renderLinks();
+
+    // Merge request count — take higher for today
+    const today = new Date().toDateString();
+    const local = JSON.parse(localStorage.getItem('vl_requests') || '{"date":"","count":0}');
+    const remoteCount = remote.requests && remote.requests.date === today ? remote.requests.count : 0;
+    const localCount = local.date === today ? local.count : 0;
+    const mergedRequests = { date: today, count: Math.max(localCount, remoteCount) };
+    localStorage.setItem('vl_requests', JSON.stringify(mergedRequests));
+    updateReqCount();
+
+    const requests = mergedRequests;
     await fetch(SYNC_URL, {
       method: 'POST',
-      body: JSON.stringify({ vocab, links }),
+      body: JSON.stringify({ vocab, links, requests }),
       headers: { 'Content-Type': 'text/plain' }
     });
     setSyncStatus('✓ synced', false);
-    showToast(`☁️ Sync complete — ${vocab.length} words`);
+    showToast(`☁️ Sync complete — ${vocab.length} words, ${links.length} links`);
     renderLibrary();
   } catch(e) {
     setSyncStatus('sync failed', true);
