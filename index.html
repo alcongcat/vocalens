@@ -378,7 +378,7 @@ async function extractVocab() {
         doc.querySelectorAll(tag).forEach(el => el.remove());
       });
       const article = doc.querySelector('article') || doc.querySelector('main') || doc.querySelector('.content') || doc.body;
-      textToProcess = (article.innerText || article.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 6000);
+      textToProcess = (article.innerText || article.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
       if (textToProcess.length < 100) throw new Error('Could not extract text — try pasting the article text directly instead');
     } catch(e) {
       showToast('Error: ' + e.message);
@@ -435,7 +435,7 @@ ${textToProcess}
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-          body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.2 })
+          body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 4000 })
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error.message);
@@ -446,6 +446,11 @@ ${textToProcess}
       }
     }
     let raw = result.replace(/```json|```/g, '').trim();
+    // Repair truncated JSON by cutting off at the last complete object
+    const lastBrace = raw.lastIndexOf('}');
+    if (lastBrace !== -1 && !raw.trimEnd().endsWith(']')) {
+      raw = raw.slice(0, lastBrace + 1) + ']';
+    }
     const items = JSON.parse(raw);
     incrementRequestCount();
     renderResults(items);
