@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>VocabLens</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0f0e0d;
+    --ink2: #3a3835;
+    --ink3: #7a7670;
+    --paper: #f5f2ec;
+    --paper2: #ede9e1;
+    --paper3: #e2ddd4;
+    --accent: #c8501a;
+    --accent2: #e8703a;
+    --green: #2a7a4a;
+    --red: #c0392b;
+    --card: #faf8f4;
+    --shadow: 0 2px 16px rgba(15,14,13,0.10);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    max-width: 430px;
+    margin: 0 auto;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--paper);
+    border-bottom: 1.5px solid var(--paper3);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+  }
+  .logo { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--ink); letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .nav-count { font-size: 12px; color: var(--ink3); background: var(--paper2); padding: 4px 10px; border-radius: 20px; }
+
+  /* TABS */
+  .tabs {
+    display: flex; gap: 6px;
+    padding: 14px 20px 0;
+    border-bottom: 1.5px solid var(--paper3);
+    background: var(--paper);
+  }
+  .tab {
+    padding: 8px 16px; border-radius: 10px 10px 0 0;
+    font-size: 13px; font-weight: 500;
+    border: none; background: none; color: var(--ink3);
+    cursor: pointer; transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--paper2); }
+
+  /* SCREENS */
+  .screen { display: none; padding: 20px; animation: fadeUp 0.25s ease; }
+  .screen.active { display: block; }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+  /* ─── ADD SCREEN ─── */
+  .api-banner {
+    background: linear-gradient(135deg, #fff8f0 0%, #fdeee4 100%);
+    border: 1.5px solid #f0c4a0;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: var(--ink2);
+    line-height: 1.5;
+  }
+  .api-banner strong { color: var(--accent); display: block; margin-bottom: 4px; font-size: 14px; }
+  .api-banner a { color: var(--accent); text-decoration: underline; }
+
+  .field-label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); margin-bottom: 6px; }
+  .api-input-row { display: flex; gap: 8px; margin-bottom: 18px; }
+  .input-field {
+    flex: 1; padding: 12px 14px;
+    background: var(--card); border: 1.5px solid var(--paper3);
+    border-radius: 12px; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; color: var(--ink); outline: none;
+    transition: border-color 0.2s;
+  }
+  .input-field:focus { border-color: var(--accent2); }
+  .input-field::placeholder { color: var(--ink3); }
+  textarea.input-field { resize: none; min-height: 130px; line-height: 1.6; }
+
+  .btn {
+    padding: 13px 20px; border-radius: 12px;
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 14px;
+    border: none; cursor: pointer; transition: all 0.18s;
+    display: flex; align-items: center; gap: 8px; justify-content: center;
+  }
+  .btn-primary { background: var(--accent); color: white; width: 100%; }
+  .btn-primary:active { background: #a83f14; transform: scale(0.98); }
+  .btn-sm { background: var(--paper2); color: var(--ink2); padding: 10px 14px; font-size: 13px; white-space: nowrap; }
+  .btn-sm:active { background: var(--paper3); }
+  .btn-ghost { background: transparent; color: var(--ink3); border: 1.5px solid var(--paper3); width: 100%; margin-top: 10px; }
+
+  .source-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .source-tab {
+    flex: 1; padding: 10px; border-radius: 10px; text-align: center;
+    font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+    border: 1.5px solid var(--paper3); background: var(--card); color: var(--ink3);
+  }
+  .source-tab.active { border-color: var(--accent); background: #fff3ee; color: var(--accent); }
+
+  .loading-bar {
+    display: none; background: var(--paper2); border-radius: 10px;
+    height: 6px; overflow: hidden; margin: 14px 0;
+  }
+  .loading-bar.active { display: block; }
+  .loading-bar-inner {
+    height: 100%; width: 40%; background: var(--accent);
+    border-radius: 10px; animation: slide 1.2s infinite ease-in-out;
+  }
+  @keyframes slide { 0%{margin-left:-40%} 100%{margin-left:100%} }
+  .loading-text { text-align: center; font-size: 13px; color: var(--ink3); margin-top: 8px; display: none; }
+  .loading-text.active { display: block; }
+
+  /* Results preview */
+  .results-preview { margin-top: 18px; }
+  .result-item {
+    background: var(--card); border: 1.5px solid var(--paper3);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+    position: relative;
+  }
+  .result-item .word { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--ink); }
+  .result-item .type-badge {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px; margin-left: 8px; vertical-align: middle;
+  }
+  .badge-idiom { background: #fdeee4; color: var(--accent); }
+  .badge-vocab { background: #e4f0ed; color: var(--green); }
+  .badge-expression { background: #ede9f5; color: #6b4faa; }
+  .result-item .definition { font-size: 13px; color: var(--ink2); margin-top: 5px; line-height: 1.5; }
+  .result-item .example { font-size: 12px; color: var(--ink3); margin-top: 5px; font-style: italic; line-height: 1.4; }
+  .result-item .add-btn {
+    position: absolute; top: 12px; right: 12px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--paper2); border: none; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .result-item .add-btn:hover { background: var(--accent); color: white; }
+  .result-item .add-btn.added { background: var(--green); color: white; }
+
+  /* ─── LIBRARY SCREEN ─── */
+  .search-bar { position: relative; margin-bottom: 16px; }
+  .search-bar input { width: 100%; padding: 11px 14px 11px 38px; }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 15px; color: var(--ink3); }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-chip {
+    padding: 6px 14px; border-radius: 20px; white-space: nowrap;
+    font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.18s;
+    border: 1.5px solid var(--paper3); background: var(--card); color: var(--ink3);
+  }
+  .filter-chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .vocab-card {
+    background: var(--card); border: 1.5px solid var(--paper3);
+    border-radius: var(--radius); padding: 16px 18px; margin-bottom: 10px;
+    cursor: pointer; transition: all 0.18s; position: relative;
+  }
+  .vocab-card:active { transform: scale(0.99); }
+  .vocab-card .vc-word { font-family: 'DM Serif Display', serif; font-size: 20px; }
+  .vocab-card .vc-def { font-size: 13px; color: var(--ink2); margin-top: 4px; line-height: 1.45; }
+  .vocab-card .vc-source { font-size: 11px; color: var(--ink3); margin-top: 8px; }
+  .vocab-card .vc-del {
+    position: absolute; top: 14px; right: 14px;
+    background: none; border: none; color: var(--ink3); font-size: 16px;
+    cursor: pointer; padding: 4px; line-height: 1;
+  }
+  .vc-del:active { color: var(--red); }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--ink3); }
+  .empty-state .e-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  /* ─── QUIZ SCREEN ─── */
+  .quiz-setup { text-align: center; padding: 30px 0; }
+  .quiz-setup h2 { font-family: 'DM Serif Display', serif; font-size: 26px; margin-bottom: 8px; }
+  .quiz-setup p { font-size: 14px; color: var(--ink3); margin-bottom: 28px; line-height: 1.5; }
+  .quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+  .quiz-opt-btn {
+    padding: 14px 10px; border-radius: 12px; text-align: center;
+    border: 1.5px solid var(--paper3); background: var(--card);
+    cursor: pointer; transition: all 0.2s; font-size: 13px;
+    font-family: 'DM Sans', sans-serif; font-weight: 500; color: var(--ink2);
+  }
+  .quiz-opt-btn .opt-icon { font-size: 22px; display: block; margin-bottom: 5px; }
+  .quiz-opt-btn.selected { border-color: var(--accent); background: #fff3ee; color: var(--accent); }
+
+  /* Quiz active */
+  .quiz-active { display: none; }
+  .quiz-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .progress-track { flex: 1; height: 6px; background: var(--paper3); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s ease; }
+  .progress-label { font-size: 12px; color: var(--ink3); white-space: nowrap; }
+
+  .question-card {
+    background: var(--card); border: 1.5px solid var(--paper3);
+    border-radius: 20px; padding: 28px 22px; margin-bottom: 20px;
+    text-align: center; min-height: 160px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .q-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin-bottom: 12px; }
+  .q-word { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--ink); line-height: 1.2; }
+  .q-context { font-size: 13px; color: var(--ink3); margin-top: 10px; font-style: italic; line-height: 1.5; }
+
+  .choices { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .choice-btn {
+    padding: 15px 18px; border-radius: 12px;
+    text-align: left; font-family: 'DM Sans', sans-serif; font-size: 14px;
+    border: 1.5px solid var(--paper3); background: var(--card); color: var(--ink2);
+    cursor: pointer; transition: all 0.2s; line-height: 1.4;
+  }
+  .choice-btn:active { transform: scale(0.99); }
+  .choice-btn.correct { background: #e8f5ee; border-color: var(--green); color: var(--green); font-weight: 500; }
+  .choice-btn.wrong { background: #fdeaea; border-color: var(--red); color: var(--red); }
+  .choice-btn.reveal { background: #e8f5ee; border-color: var(--green); color: var(--green); opacity: 0.6; }
+  .choice-btn:disabled { cursor: default; }
+
+  .result-feedback {
+    text-align: center; padding: 14px; border-radius: 12px;
+    font-size: 14px; font-weight: 500; margin-bottom: 16px; display: none;
+  }
+  .result-feedback.correct { background: #e8f5ee; color: var(--green); display: block; }
+  .result-feedback.wrong { background: #fdeaea; color: var(--red); display: block; }
+
+  .next-btn {
+    width: 100%; padding: 15px; border-radius: 12px;
+    background: var(--ink); color: var(--paper);
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 15px;
+    border: none; cursor: pointer; transition: all 0.18s; display: none;
+  }
+  .next-btn:active { background: var(--ink2); transform: scale(0.99); }
+
+  /* Quiz results */
+  .quiz-results { display: none; text-align: center; padding: 20px 0; }
+  .score-ring {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: conic-gradient(var(--accent) 0%, var(--paper3) 0%);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px; position: relative;
+  }
+  .score-ring-inner {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: var(--paper); display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .score-num { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--ink); }
+  .score-denom { font-size: 12px; color: var(--ink3); }
+  .quiz-results h2 { font-family: 'DM Serif Display', serif; font-size: 24px; margin-bottom: 8px; }
+  .quiz-results p { font-size: 14px; color: var(--ink3); margin-bottom: 28px; }
+  .missed-list { text-align: left; margin-bottom: 20px; }
+  .missed-item { background: #fdeaea; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; color: var(--red); }
+  .missed-item strong { font-weight: 600; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--ink); color: var(--paper); padding: 10px 20px;
+    border-radius: 24px; font-size: 13px; font-weight: 500;
+    transition: transform 0.3s ease; z-index: 999; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Vocab<span>Lens</span></div>
+  <div class="nav-count" id="navCount">0 words</div>
+</nav>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('add')">＋ Add</button>
+  <button class="tab" onclick="switchTab('library')">Library</button>
+  <button class="tab" onclick="switchTab('quiz')">Quiz</button>
+</div>
+
+<!-- ═══════════════ ADD SCREEN ═══════════════ -->
+<div class="screen active" id="screen-add">
+
+  <div class="api-banner">
+    <strong>🔑 Gemini API Key required</strong>
+    Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a> — free, no credit card needed.
+  </div>
+
+  <div class="field-label">Your Gemini API Key</div>
+  <div class="api-input-row">
+    <input class="input-field" type="password" id="apiKeyInput" placeholder="AIza..." />
+    <button class="btn btn-sm" onclick="saveKey()">Save</button>
+  </div>
+
+  <div class="field-label">Source</div>
+  <div class="source-tabs">
+    <div class="source-tab active" onclick="switchSource('instagram')" id="src-instagram">📸 Instagram</div>
+    <div class="source-tab" onclick="switchSource('article')" id="src-article">📰 Article</div>
+  </div>
+
+  <div id="instagram-hint" style="background:var(--paper2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink2);line-height:1.5;">
+    <strong style="display:block;margin-bottom:4px;">How to add from Instagram:</strong>
+    1. Open post → tap ··· → <em>Copy</em> the caption<br>
+    2. Paste it below and tap Extract
+  </div>
+
+  <div class="field-label">Paste text here</div>
+  <textarea class="input-field" id="textInput" placeholder="Paste Instagram caption or article paragraph here…"></textarea>
+
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" onclick="extractVocab()">
+      <span>✨</span> Extract vocabulary with AI
+    </button>
+  </div>
+
+  <div class="loading-bar" id="loadingBar"><div class="loading-bar-inner"></div></div>
+  <div class="loading-text" id="loadingText">Gemini is reading your text…</div>
+
+  <div class="results-preview" id="resultsArea"></div>
+
+</div>
+
+<!-- ═══════════════ LIBRARY SCREEN ═══════════════ -->
+<div class="screen" id="screen-library">
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input class="input-field" id="searchInput" placeholder="Search words…" oninput="renderLibrary()" />
+  </div>
+  <div class="filter-row">
+    <div class="filter-chip active" onclick="setFilter('all', this)">All</div>
+    <div class="filter-chip" onclick="setFilter('idiom', this)">Idioms</div>
+    <div class="filter-chip" onclick="setFilter('vocab', this)">Vocabulary</div>
+    <div class="filter-chip" onclick="setFilter('expression', this)">Expressions</div>
+  </div>
+  <div id="libraryList"></div>
+</div>
+
+<!-- ═══════════════ QUIZ SCREEN ═══════════════ -->
+<div class="screen" id="screen-quiz">
+
+  <div id="quizSetup" class="quiz-setup">
+    <h2>Ready to test<br><em>yourself?</em></h2>
+    <p>Choose a quiz type. You need at least<br>4 words in your library to start.</p>
+
+    <div class="quiz-options">
+      <div class="quiz-opt-btn selected" onclick="selectQuizType('definition', this)" id="qt-definition">
+        <span class="opt-icon">📖</span>Word → Definition
+      </div>
+      <div class="quiz-opt-btn" onclick="selectQuizType('word', this)" id="qt-word">
+        <span class="opt-icon">💬</span>Definition → Word
+      </div>
+      <div class="quiz-opt-btn" onclick="selectQuizType('example', this)" id="qt-example">
+        <span class="opt-icon">✍️</span>Fill the sentence
+      </div>
+      <div class="quiz-opt-btn" onclick="selectQuizType('mixed', this)" id="qt-mixed">
+        <span class="opt-icon">🎲</span>Mixed mode
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="startQuiz()">Start Quiz</button>
+    <button class="btn btn-ghost" onclick="switchTab('add')">Add more words first</button>
+  </div>
+
+  <div id="quizActive" class="quiz-active">
+    <div class="quiz-progress">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">1 / 10</div>
+    </div>
+    <div class="question-card" id="questionCard">
+      <div class="q-label" id="qLabel">What does this mean?</div>
+      <div class="q-word" id="qWord"></div>
+      <div class="q-context" id="qContext"></div>
+    </div>
+    <div class="choices" id="choicesContainer"></div>
+    <div class="result-feedback" id="resultFeedback"></div>
+    <button class="next-btn" id="nextBtn" onclick="nextQuestion()">Next →</button>
+  </div>
+
+  <div id="quizResults" class="quiz-results">
+    <div class="score-ring" id="scoreRing">
+      <div class="score-ring-inner">
+        <div class="score-num" id="scoreNum">0</div>
+        <div class="score-denom" id="scoreDenom">of 0</div>
+      </div>
+    </div>
+    <h2 id="resultTitle">Great work!</h2>
+    <p id="resultMsg"></p>
+    <div class="missed-list" id="missedList"></div>
+    <button class="btn btn-primary" onclick="startQuiz()">Try again</button>
+    <button class="btn btn-ghost" onclick="showQuizSetup()">Change quiz type</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───
+let vocab = JSON.parse(localStorage.getItem('vl_vocab') || '[]');
+let apiKey = localStorage.getItem('vl_key') || '';
+let currentFilter = 'all';
+let quizType = 'definition';
+let quizQuestions = [];
+let quizIndex = 0;
+let quizScore = 0;
+let quizMissed = [];
+let answered = false;
+
+// ─── INIT ───
+if (apiKey) document.getElementById('apiKeyInput').value = apiKey;
+updateCount();
+
+// ─── TABS ───
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['add','library','quiz'][i] === name);
+  });
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  if (name === 'library') renderLibrary();
+  if (name === 'quiz') { showQuizSetup(); }
+}
+
+// ─── API KEY ───
+function saveKey() {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if (!k) { showToast('Please enter your API key'); return; }
+  apiKey = k;
+  localStorage.setItem('vl_key', k);
+  showToast('✓ API key saved');
+}
+
+// ─── SOURCE TABS ───
+function switchSource(s) {
+  document.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('src-' + s).classList.add('active');
+  const hint = document.getElementById('instagram-hint');
+  hint.style.display = s === 'instagram' ? 'block' : 'none';
+  document.getElementById('textInput').placeholder =
+    s === 'instagram' ? 'Paste Instagram caption here…' : 'Paste article paragraph here…';
+}
+
+// ─── EXTRACT ───
+async function extractVocab() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) { showToast('Please paste some text first'); return; }
+  if (!apiKey) { showToast('Save your Gemini API key first'); return; }
+
+  document.getElementById('loadingBar').classList.add('active');
+  document.getElementById('loadingText').classList.add('active');
+  document.getElementById('resultsArea').innerHTML = '';
+
+  const prompt = `You are an English vocabulary tutor. From the text below, extract ALL of the following:
+1. Advanced vocabulary (C1/C2 level words)
+2. Idioms (fixed phrases with non-literal meaning)
+3. Useful expressions and collocations
+
+For each item return a JSON array. Each object must have:
+- "word": the word, idiom, or expression
+- "type": one of "vocab", "idiom", or "expression"
+- "definition": clear, concise definition (1-2 sentences)
+- "example": a new example sentence (not from the text)
+
+Return ONLY the JSON array, no other text.
+
+Text:
+"""
+${text}
+"""`;
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    let raw = data.candidates[0].content.parts[0].text;
+    raw = raw.replace(/```json|```/g, '').trim();
+    const items = JSON.parse(raw);
+    renderResults(items);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  } finally {
+    document.getElementById('loadingBar').classList.remove('active');
+    document.getElementById('loadingText').classList.remove('active');
+  }
+}
+
+function renderResults(items) {
+  const area = document.getElementById('resultsArea');
+  if (!items.length) { area.innerHTML = '<p style="color:var(--ink3);font-size:14px;text-align:center;padding:20px">No advanced vocabulary found. Try a longer text.</p>'; return; }
+
+  const activeSource = document.querySelector('.source-tab.active').textContent.includes('Instagram') ? 'Instagram' : 'Article';
+
+  area.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Found <strong style="color:var(--ink)">${items.length} items</strong> — tap + to save</div>`;
+  items.forEach((item, i) => {
+    const badge = item.type === 'idiom' ? 'badge-idiom' : item.type === 'expression' ? 'badge-expression' : 'badge-vocab';
+    const div = document.createElement('div');
+    div.className = 'result-item';
+    div.innerHTML = `
+      <div>
+        <span class="word">${item.word}</span>
+        <span class="type-badge ${badge}">${item.type}</span>
+      </div>
+      <div class="definition">${item.definition}</div>
+      <div class="example">"${item.example}"</div>
+      <button class="add-btn" id="addbtn-${i}" onclick="addItem(${i}, this, ${JSON.stringify(item).replace(/"/g,'&quot;')}, '${activeSource}')">＋</button>
+    `;
+    area.appendChild(div);
+  });
+}
+
+function addItem(i, btn, item, source) {
+  if (btn.classList.contains('added')) return;
+  const entry = { ...item, id: Date.now() + i, source, date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'}) };
+  vocab.push(entry);
+  save();
+  btn.textContent = '✓';
+  btn.classList.add('added');
+  updateCount();
+  showToast(`"${item.word}" saved to library`);
+}
+
+// ─── LIBRARY ───
+function renderLibrary() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const list = document.getElementById('libraryList');
+  let filtered = vocab.filter(v =>
+    (currentFilter === 'all' || v.type === currentFilter) &&
+    (!q || v.word.toLowerCase().includes(q) || v.definition.toLowerCase().includes(q))
+  ).reverse();
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><div class="e-icon">${vocab.length ? '🔍' : '📚'}</div><p>${vocab.length ? 'No words match your search.' : 'Your library is empty.<br>Add words from the Add tab.'}</p></div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(v => {
+    const badge = v.type === 'idiom' ? 'badge-idiom' : v.type === 'expression' ? 'badge-expression' : 'badge-vocab';
+    return `<div class="vocab-card">
+      <span class="vc-word">${v.word}</span>
+      <span class="type-badge ${badge}" style="font-size:10px;vertical-align:middle;margin-left:6px;">${v.type}</span>
+      <div class="vc-def">${v.definition}</div>
+      <div class="vc-example" style="font-size:12px;color:var(--ink3);margin-top:5px;font-style:italic;">"${v.example}"</div>
+      <div class="vc-source">📌 ${v.source} · ${v.date}</div>
+      <button class="vc-del" onclick="deleteItem(${v.id}, event)">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderLibrary();
+}
+
+function deleteItem(id, e) {
+  e.stopPropagation();
+  vocab = vocab.filter(v => v.id !== id);
+  save();
+  updateCount();
+  renderLibrary();
+  showToast('Word removed');
+}
+
+// ─── QUIZ ───
+function selectQuizType(type, el) {
+  quizType = type;
+  document.querySelectorAll('.quiz-opt-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function showQuizSetup() {
+  document.getElementById('quizSetup').style.display = 'block';
+  document.getElementById('quizActive').style.display = 'none';
+  document.getElementById('quizResults').style.display = 'none';
+}
+
+function startQuiz() {
+  if (vocab.length < 4) { showToast('Add at least 4 words to start a quiz'); return; }
+  const shuffled = [...vocab].sort(() => Math.random() - 0.5);
+  const count = Math.min(10, shuffled.length);
+  quizQuestions = shuffled.slice(0, count);
+  quizIndex = 0; quizScore = 0; quizMissed = [];
+
+  document.getElementById('quizSetup').style.display = 'none';
+  document.getElementById('quizActive').style.display = 'block';
+  document.getElementById('quizResults').style.display = 'none';
+  showQuestion();
+}
+
+function getEffectiveType() {
+  if (quizType === 'mixed') {
+    const types = ['definition', 'word', 'example'];
+    return types[Math.floor(Math.random() * types.length)];
+  }
+  return quizType;
+}
+
+function showQuestion() {
+  answered = false;
+  document.getElementById('resultFeedback').className = 'result-feedback';
+  document.getElementById('nextBtn').style.display = 'none';
+
+  const total = quizQuestions.length;
+  const pct = (quizIndex / total) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${quizIndex + 1} / ${total}`;
+
+  const q = quizQuestions[quizIndex];
+  const type = getEffectiveType();
+  quizQuestions[quizIndex]._effectiveType = type;
+
+  const wrongs = vocab.filter(v => v.id !== q.id).sort(() => Math.random() - 0.5).slice(0, 3);
+  const choices = [...wrongs, q].sort(() => Math.random() - 0.5);
+
+  if (type === 'definition') {
+    document.getElementById('qLabel').textContent = 'What does this mean?';
+    document.getElementById('qWord').textContent = q.word;
+    document.getElementById('qContext').textContent = '';
+    document.getElementById('choicesContainer').innerHTML = choices.map(c =>
+      `<button class="choice-btn" onclick="answer(this, '${c.id}', '${q.id}')">${c.definition}</button>`
+    ).join('');
+  } else if (type === 'word') {
+    document.getElementById('qLabel').textContent = 'Which word matches this definition?';
+    document.getElementById('qWord').textContent = q.definition;
+    document.getElementById('qContext').textContent = '';
+    document.getElementById('choicesContainer').innerHTML = choices.map(c =>
+      `<button class="choice-btn" onclick="answer(this, '${c.id}', '${q.id}')">${c.word}</button>`
+    ).join('');
+  } else {
+    document.getElementById('qLabel').textContent = 'Complete the sentence';
+    const blanked = q.example.replace(new RegExp(q.word, 'gi'), '______');
+    document.getElementById('qWord').textContent = blanked;
+    document.getElementById('qContext').textContent = '';
+    document.getElementById('choicesContainer').innerHTML = choices.map(c =>
+      `<button class="choice-btn" onclick="answer(this, '${c.id}', '${q.id}')">${c.word}</button>`
+    ).join('');
+  }
+}
+
+function answer(btn, chosenId, correctId) {
+  if (answered) return;
+  answered = true;
+  const correct = chosenId === correctId;
+
+  document.querySelectorAll('.choice-btn').forEach(b => {
+    b.disabled = true;
+    const bid = b.getAttribute('onclick').match(/'([^']+)'/g)[0].replace(/'/g,'');
+    if (bid === correctId) b.classList.add(correct ? 'correct' : 'reveal');
+  });
+  if (!correct) btn.classList.add('wrong');
+
+  const fb = document.getElementById('resultFeedback');
+  if (correct) {
+    quizScore++;
+    fb.className = 'result-feedback correct';
+    fb.textContent = '✓ Correct!';
+  } else {
+    const q = quizQuestions[quizIndex];
+    fb.className = 'result-feedback wrong';
+    fb.textContent = `✗  The answer was: "${q.word}"`;
+    quizMissed.push(q);
+  }
+
+  document.getElementById('nextBtn').style.display = 'block';
+  document.getElementById('nextBtn').textContent =
+    quizIndex + 1 < quizQuestions.length ? 'Next →' : 'See results';
+}
+
+function nextQuestion() {
+  quizIndex++;
+  if (quizIndex >= quizQuestions.length) { showResults(); return; }
+  showQuestion();
+}
+
+function showResults() {
+  document.getElementById('quizActive').style.display = 'none';
+  document.getElementById('quizResults').style.display = 'block';
+
+  const total = quizQuestions.length;
+  const pct = Math.round((quizScore / total) * 100);
+  document.getElementById('scoreNum').textContent = quizScore;
+  document.getElementById('scoreDenom').textContent = `of ${total}`;
+  document.getElementById('scoreRing').style.background =
+    `conic-gradient(var(--accent) ${pct * 3.6}deg, var(--paper3) 0deg)`;
+
+  const title = pct === 100 ? 'Perfect score! 🎉' : pct >= 70 ? 'Great work! 💪' : pct >= 40 ? 'Keep going! 📖' : 'More practice needed 🔁';
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultMsg').textContent = `You got ${quizScore} out of ${total} correct (${pct}%)`;
+
+  const missedDiv = document.getElementById('missedList');
+  if (quizMissed.length) {
+    missedDiv.innerHTML = `<div style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Review these:</div>` +
+      quizMissed.map(m => `<div class="missed-item"><strong>${m.word}</strong> — ${m.definition}</div>`).join('');
+  } else {
+    missedDiv.innerHTML = '';
+  }
+}
+
+// ─── UTILS ───
+function save() { localStorage.setItem('vl_vocab', JSON.stringify(vocab)); }
+function updateCount() {
+  const n = vocab.length;
+  document.getElementById('navCount').textContent = n + (n === 1 ? ' word' : ' words');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
