@@ -200,7 +200,6 @@
     <div class="filter-chip" onclick="setFilter('vocab', this)">Vocabulary</div>
     <div class="filter-chip" onclick="setFilter('expression', this)">Expressions</div>
     <div class="filter-chip" onclick="setFilter('terminology', this)">Terminology</div>
-    <div class="filter-chip" onclick="setFilter('jargon', this)">Jargon</div>
   </div>
   <div id="libraryList"></div>
 </div>
@@ -398,29 +397,26 @@ async function extractVocab() {
 
   document.getElementById('loadingText').textContent = 'Extracting vocabulary…';
 
-  const prompt = `You are an expert English vocabulary tutor specializing in literary criticism, humanities, and academic writing. Analyze the text below with the depth of a university professor.
+  const prompt = `You are a Cambridge English C1/C2 proficiency examiner and literary scholar. Analyze the text below with extreme rigour.
 
-Extract sophisticated, advanced items and classify each into EXACTLY one of these 5 types:
-- "vocab": advanced C1/C2 single words (e.g. simulacrum, insidious, precarity, circumlocutory)
-- "idiom": figurative fixed phrases with non-literal meaning (e.g. "lay bare", "take at face value")
-- "expression": natural collocations, phrasal verbs, set expressions (e.g. "against all odds", "a tissue of citations")
-- "terminology": academic, literary, philosophical, or domain-specific terms (e.g. ekphrasis, metafictional, apoliticality, universalism)
-- "jargon": technical or industry-specific language (e.g. large language model, fine-tuning, token)
+EXTRACT ONLY items that meet C1/C2 standard. Reject anything a B2 learner would already know.
 
-Rules:
-- Do NOT include common or basic words
-- Be as thorough as Gemini or GPT-4 — extract every sophisticated item
-- Focus on words a highly educated non-native speaker would find challenging
-- Include literary/critical terms, philosophical concepts, institutional language, and rhetorical devices
+CATEGORIES (use exactly these type values):
+- "vocab": Single words at C1/C2 level. Think: simulacrum, obfuscation, precarity, insidious, circumlocutory, ekphrasis, discursive, nondescript, ubiquitous, elegy. NOT: important, different, complex, suggest, various.
+- "idiom": Fixed figurative phrases where meaning ≠ literal words. Think: "lay bare", "take at face value", "a tissue of lies", "against all odds", "throw into relief", "in the wake of". NOT: "a lot of", "in order to".
+- "expression": Sophisticated collocations, academic phrases, or set expressions used by educated writers. Think: "rhetorical sleight of hand", "lend credence to", "call into question", "in no small part", "bears little resemblance to". NOT: "in addition", "as a result".
+- "terminology": Domain-specific academic or literary-critical terms requiring specialist knowledge. Think: metafictional, apoliticality, Sisyphean, quasi-sentient, universalism, ekphrasis, hegemony, ontological. NOT: paragraph, chapter, research.
 
-Return a JSON array only. Each object must have:
-- "word": exact word or phrase (include part of speech in brackets, e.g. "simulacrum (n.)")
-- "type": one of exactly "vocab", "idiom", "expression", "terminology", "jargon"
-- "definition": precise, intellectually rich English definition (1-2 sentences)
-- "korean": 한국어로 뜻과 간단한 설명
-- "example": a sophisticated new example sentence in the same register as the source text
+DO NOT include a "jargon" category at all.
 
-No markdown, no explanation — raw JSON array only.
+STRICT RULES:
+- Every "vocab" item must be a word most educated non-native English speakers at B2 level would NOT know
+- Every "idiom" must be non-literal — if you can understand it word by word, it's not an idiom
+- Minimum 25 items total. Be thorough. A rich literary article should yield 30-50 items.
+- Part of speech required in brackets: simulacrum (n.), insidious (adj.), lay bare (v. phr.)
+
+Return ONLY a raw JSON array. Each object: { "word", "type", "definition", "korean", "example" }
+No markdown, no explanation.
 
 Text:
 """
