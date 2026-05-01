@@ -472,9 +472,10 @@ function renderResults(items) {
     const div = document.createElement('div');
     div.className = 'result-item';
     div.innerHTML = `
-      <div>
+      <div style="display:flex;align-items:center;gap:8px;padding-right:36px;">
         <span class="word">${item.word}</span>
         <span class="type-badge ${badge}">${item.type}</span>
+        <button onclick="speak('${item.word.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px;line-height:1;color:var(--ink3);" title="Listen">🔊</button>
       </div>
       <div class="definition">${item.definition}</div>
       <div class="example">"${item.example}"</div>
@@ -512,8 +513,11 @@ function renderLibrary() {
   list.innerHTML = filtered.map(v => {
     const badge = {idiom:'badge-idiom',expression:'badge-expression',terminology:'badge-terminology',jargon:'badge-jargon'}[v.type] || 'badge-vocab';
     return `<div class="vocab-card">
-      <span class="vc-word">${v.word}</span>
-      <span class="type-badge ${badge}" style="font-size:10px;vertical-align:middle;margin-left:6px;">${v.type}</span>
+      <div style="display:flex;align-items:center;gap:8px;padding-right:36px;">
+        <span class="vc-word">${v.word}</span>
+        <span class="type-badge ${badge}" style="font-size:10px;vertical-align:middle;">${v.type}</span>
+        <button onclick="speak('${v.word.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px;line-height:1;color:var(--ink3);" title="Listen">🔊</button>
+      </div>
       <div class="vc-def">${v.definition}</div>
       ${v.korean ? `<div style="font-size:12px;color:var(--ink3);margin-top:4px;padding-top:5px;border-top:1px solid var(--paper3);">🇰🇷 ${v.korean}</div>` : ''}
       <div class="vc-example" style="font-size:12px;color:var(--ink3);margin-top:5px;font-style:italic;">"${v.example}"</div>
@@ -661,7 +665,23 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-// ─── LINKS ───
+// ─── PRONUNCIATION ───
+function speak(word) {
+  if (!window.speechSynthesis) { showToast('Speech not supported'); return; }
+  window.speechSynthesis.cancel();
+  const clean = word.replace(/\(.*?\)/g, '').replace(/\[.*?\]/g, '').trim();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.lang = 'en-US';
+  utter.rate = 0.82;
+  utter.pitch = 1;
+  // Pick a natural English voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.lang === 'en-US' && /samantha|karen|daniel|google us|alex/i.test(v.name))
+    || voices.find(v => v.lang === 'en-US')
+    || voices.find(v => v.lang.startsWith('en'));
+  if (preferred) utter.voice = preferred;
+  window.speechSynthesis.speak(utter);
+}
 function saveLink() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) { showToast('Paste a URL first'); return; }
