@@ -405,7 +405,7 @@ let vocab = JSON.parse(localStorage.getItem('vl_vocab') || '[]');
 let links = JSON.parse(localStorage.getItem('vl_links') || '[]');
 // ═══════════════════════════════════════════
 // 🔑 PASTE YOUR GEMINI API KEY HERE
-const GEMINI_API_KEY = 'AIzaSyDAz6z_eZejJT-CDep46dQ-gG97wU4RG3s';
+const GEMINI_API_KEY = 'YOUR_API_KEY_HERE';
 // ═══════════════════════════════════════════
 
 let currentFilter = 'all';
@@ -449,46 +449,12 @@ async function extractVocab() {
   if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_API_KEY_HERE') { showToast('Please add your API key to the file'); return; }
 
   const isArticle = document.getElementById('src-article').classList.contains('active');
-  let text = '';
 
-  if (isArticle) {
-    const url = document.getElementById('urlInput').value.trim();
-    if (!url) { showToast('Please paste an article URL'); return; }
-    document.getElementById('loadingBar').classList.add('active');
-    document.getElementById('loadingText').classList.add('active');
-    document.getElementById('loadingText').textContent = 'Fetching article…';
-    document.getElementById('resultsArea').innerHTML = '';
-    try {
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-      const r = await fetch(proxyUrl);
-      const d = await r.json();
-      if (!d.contents) throw new Error('Could not fetch article');
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(d.contents, 'text/html');
-      ['script','style','nav','header','footer','aside','figure','img','button','form'].forEach(tag => {
-        doc.querySelectorAll(tag).forEach(el => el.remove());
-      });
-      const article = doc.querySelector('article') || doc.querySelector('main') || doc.body;
-      text = article.innerText || article.textContent || '';
-      text = text.replace(/\s+/g, ' ').trim().slice(0, 8000);
-      if (text.length < 100) throw new Error('Article text too short — site may block access');
-    } catch(e) {
-      showToast('Error: ' + e.message);
-      document.getElementById('loadingBar').classList.remove('active');
-      document.getElementById('loadingText').classList.remove('active');
-      return;
-    }
-  } else {
-    text = document.getElementById('textInput').value.trim();
-    if (!text) { showToast('Please paste some text first'); return; }
-    document.getElementById('loadingBar').classList.add('active');
-    document.getElementById('loadingText').classList.add('active');
-    document.getElementById('resultsArea').innerHTML = '';
-  }
+  document.getElementById('loadingBar').classList.add('active');
+  document.getElementById('loadingText').classList.add('active');
+  document.getElementById('resultsArea').innerHTML = '';
 
-  document.getElementById('loadingText').textContent = 'Gemini is reading the text…';
-
-  const prompt = `You are an expert English vocabulary tutor for advanced Korean learners. From the text below, extract ALL of the following — be thorough and do not skip any:
+  const promptText = `You are an expert English vocabulary tutor for advanced Korean learners. Extract ALL of the following — be thorough and do not skip any:
 
 1. Advanced vocabulary — C1/C2 level words that non-native speakers may not know
 2. Idioms — fixed phrases with non-literal or figurative meaning
@@ -505,18 +471,30 @@ For each item return a JSON array. Each object must have:
 
 Be generous — extract everything a Korean English learner would benefit from knowing. Do not skip rare words, domain terms, or subtle expressions.
 
-Return ONLY the JSON array, no other text.
+Return ONLY the JSON array, no other text.`;
 
-Text:
-"""
-${text}
-"""`;
+  let parts;
+
+  if (isArticle) {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) { showToast('Please paste an article URL'); document.getElementById('loadingBar').classList.remove('active'); document.getElementById('loadingText').classList.remove('active'); return; }
+    document.getElementById('loadingText').textContent = 'Gemini is reading the article…';
+    parts = [
+      { text: promptText + '\n\nArticle URL: ' + url + '\n\nPlease read the article at the above URL and extract vocabulary from it.' },
+      { file_data: { mime_type: 'text/html', file_uri: url } }
+    ];
+  } else {
+    const text = document.getElementById('textInput').value.trim();
+    if (!text) { showToast('Please paste some text first'); document.getElementById('loadingBar').classList.remove('active'); document.getElementById('loadingText').classList.remove('active'); return; }
+    document.getElementById('loadingText').textContent = 'Gemini is reading the text…';
+    parts = [{ text: promptText + '\n\nText:\n"""\n' + text + '\n"""' }];
+  }
 
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+      body: JSON.stringify({ contents: [{ role: 'user', parts }] })
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
