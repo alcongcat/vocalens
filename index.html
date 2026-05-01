@@ -67,19 +67,6 @@
   @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
 
   /* ─── ADD SCREEN ─── */
-  .api-banner {
-    background: linear-gradient(135deg, #fff8f0 0%, #fdeee4 100%);
-    border: 1.5px solid #f0c4a0;
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 18px;
-    font-size: 13px;
-    color: var(--ink2);
-    line-height: 1.5;
-  }
-  .api-banner strong { color: var(--accent); display: block; margin-bottom: 4px; font-size: 14px; }
-  .api-banner a { color: var(--accent); text-decoration: underline; }
-
   .field-label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); margin-bottom: 6px; }
   .api-input-row { display: flex; gap: 8px; margin-bottom: 18px; }
   .input-field {
@@ -91,7 +78,7 @@
   }
   .input-field:focus { border-color: var(--accent2); }
   .input-field::placeholder { color: var(--ink3); }
-  textarea.input-field { resize: none; min-height: 130px; line-height: 1.6; }
+  textarea.input-field { resize: none; min-height: 130px; line-height: 1.6; width: 100%; }
 
   .btn {
     padding: 13px 20px; border-radius: 12px;
@@ -142,6 +129,8 @@
   .badge-idiom { background: #fdeee4; color: var(--accent); }
   .badge-vocab { background: #e4f0ed; color: var(--green); }
   .badge-expression { background: #ede9f5; color: #6b4faa; }
+  .badge-terminology { background: #e4eef8; color: #1a5fa8; }
+  .badge-jargon { background: #e8f5e4; color: #2d7a1f; }
   .result-item .definition { font-size: 13px; color: var(--ink2); margin-top: 5px; line-height: 1.5; }
   .result-item .example { font-size: 12px; color: var(--ink3); margin-top: 5px; font-style: italic; line-height: 1.4; }
   .result-item .add-btn {
@@ -287,21 +276,11 @@
   <button class="tab active" onclick="switchTab('add')">＋ Add</button>
   <button class="tab" onclick="switchTab('library')">Library</button>
   <button class="tab" onclick="switchTab('quiz')">Quiz</button>
+  <button class="tab" onclick="switchTab('links')">Links</button>
 </div>
 
 <!-- ═══════════════ ADD SCREEN ═══════════════ -->
 <div class="screen active" id="screen-add">
-
-  <div class="api-banner">
-    <strong>🔑 Gemini API Key required</strong>
-    Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a> — free, no credit card needed.
-  </div>
-
-  <div class="field-label">Your Gemini API Key</div>
-  <div class="api-input-row">
-    <input class="input-field" type="password" id="apiKeyInput" placeholder="AIza..." />
-    <button class="btn btn-sm" onclick="saveKey()">Save</button>
-  </div>
 
   <div class="field-label">Source</div>
   <div class="source-tabs">
@@ -315,8 +294,17 @@
     2. Paste it below and tap Extract
   </div>
 
-  <div class="field-label">Paste text here</div>
-  <textarea class="input-field" id="textInput" placeholder="Paste Instagram caption or article paragraph here…"></textarea>
+  <div id="article-hint" style="display:none;background:var(--paper2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink2);line-height:1.5;">
+    <strong style="display:block;margin-bottom:4px;">Paste an article URL:</strong>
+    The app will fetch and read the article automatically.
+  </div>
+
+  <div class="field-label" id="inputLabel">Paste text here</div>
+  <input class="input-field" type="url" id="urlInput" placeholder="https://..." style="display:none;width:100%;margin-bottom:0;" />
+  <div id="saveLinkRow" style="display:none;margin-top:8px;margin-bottom:4px;">
+    <button class="btn btn-ghost" style="margin-top:0;width:100%;" onclick="saveLink()">🔖 Save link to Links tab</button>
+  </div>
+  <textarea class="input-field" id="textInput" placeholder="Paste Instagram caption here…"></textarea>
 
   <div style="margin-top:12px;">
     <button class="btn btn-primary" onclick="extractVocab()">
@@ -342,6 +330,8 @@
     <div class="filter-chip" onclick="setFilter('idiom', this)">Idioms</div>
     <div class="filter-chip" onclick="setFilter('vocab', this)">Vocabulary</div>
     <div class="filter-chip" onclick="setFilter('expression', this)">Expressions</div>
+    <div class="filter-chip" onclick="setFilter('terminology', this)">Terminology</div>
+    <div class="filter-chip" onclick="setFilter('jargon', this)">Jargon</div>
   </div>
   <div id="libraryList"></div>
 </div>
@@ -402,12 +392,22 @@
   </div>
 </div>
 
+<!-- ═══════════════ LINKS SCREEN ═══════════════ -->
+<div class="screen" id="screen-links">
+  <div id="linksList"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 // ─── STATE ───
 let vocab = JSON.parse(localStorage.getItem('vl_vocab') || '[]');
-let apiKey = localStorage.getItem('vl_key') || '';
+let links = JSON.parse(localStorage.getItem('vl_links') || '[]');
+// ═══════════════════════════════════════════
+// 🔑 PASTE YOUR GEMINI API KEY HERE
+const GEMINI_API_KEY = 'YOUR_API_KEY_HERE';
+// ═══════════════════════════════════════════
+
 let currentFilter = 'all';
 let quizType = 'definition';
 let quizQuestions = [];
@@ -417,59 +417,93 @@ let quizMissed = [];
 let answered = false;
 
 // ─── INIT ───
-if (apiKey) document.getElementById('apiKeyInput').value = apiKey;
 updateCount();
 
 // ─── TABS ───
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    t.classList.toggle('active', ['add','library','quiz'][i] === name);
+    t.classList.toggle('active', ['add','library','quiz','links'][i] === name);
   });
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   if (name === 'library') renderLibrary();
   if (name === 'quiz') { showQuizSetup(); }
-}
-
-// ─── API KEY ───
-function saveKey() {
-  const k = document.getElementById('apiKeyInput').value.trim();
-  if (!k) { showToast('Please enter your API key'); return; }
-  apiKey = k;
-  localStorage.setItem('vl_key', k);
-  showToast('✓ API key saved');
+  if (name === 'links') renderLinks();
 }
 
 // ─── SOURCE TABS ───
 function switchSource(s) {
   document.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('src-' + s).classList.add('active');
-  const hint = document.getElementById('instagram-hint');
-  hint.style.display = s === 'instagram' ? 'block' : 'none';
-  document.getElementById('textInput').placeholder =
-    s === 'instagram' ? 'Paste Instagram caption here…' : 'Paste article paragraph here…';
+  const isArticle = s === 'article';
+  document.getElementById('instagram-hint').style.display = isArticle ? 'none' : 'block';
+  document.getElementById('article-hint').style.display = isArticle ? 'block' : 'none';
+  document.getElementById('urlInput').style.display = isArticle ? 'block' : 'none';
+  document.getElementById('saveLinkRow').style.display = isArticle ? 'block' : 'none';
+  document.getElementById('textInput').style.display = isArticle ? 'none' : 'block';
+  document.getElementById('inputLabel').textContent = isArticle ? 'Article URL' : 'Paste text here';
 }
 
 // ─── EXTRACT ───
 async function extractVocab() {
-  const text = document.getElementById('textInput').value.trim();
-  if (!text) { showToast('Please paste some text first'); return; }
-  if (!apiKey) { showToast('Save your Gemini API key first'); return; }
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_API_KEY_HERE') { showToast('Please add your API key to the file'); return; }
 
-  document.getElementById('loadingBar').classList.add('active');
-  document.getElementById('loadingText').classList.add('active');
-  document.getElementById('resultsArea').innerHTML = '';
+  const isArticle = document.getElementById('src-article').classList.contains('active');
+  let text = '';
 
-  const prompt = `You are an English vocabulary tutor. From the text below, extract ALL of the following:
-1. Advanced vocabulary (C1/C2 level words)
-2. Idioms (fixed phrases with non-literal meaning)
-3. Useful expressions and collocations
+  if (isArticle) {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) { showToast('Please paste an article URL'); return; }
+    document.getElementById('loadingBar').classList.add('active');
+    document.getElementById('loadingText').classList.add('active');
+    document.getElementById('loadingText').textContent = 'Fetching article…';
+    document.getElementById('resultsArea').innerHTML = '';
+    try {
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+      const r = await fetch(proxyUrl);
+      const d = await r.json();
+      if (!d.contents) throw new Error('Could not fetch article');
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(d.contents, 'text/html');
+      ['script','style','nav','header','footer','aside','figure','img','button','form'].forEach(tag => {
+        doc.querySelectorAll(tag).forEach(el => el.remove());
+      });
+      const article = doc.querySelector('article') || doc.querySelector('main') || doc.body;
+      text = article.innerText || article.textContent || '';
+      text = text.replace(/\s+/g, ' ').trim().slice(0, 8000);
+      if (text.length < 100) throw new Error('Article text too short — site may block access');
+    } catch(e) {
+      showToast('Error: ' + e.message);
+      document.getElementById('loadingBar').classList.remove('active');
+      document.getElementById('loadingText').classList.remove('active');
+      return;
+    }
+  } else {
+    text = document.getElementById('textInput').value.trim();
+    if (!text) { showToast('Please paste some text first'); return; }
+    document.getElementById('loadingBar').classList.add('active');
+    document.getElementById('loadingText').classList.add('active');
+    document.getElementById('resultsArea').innerHTML = '';
+  }
+
+  document.getElementById('loadingText').textContent = 'Gemini is reading the text…';
+
+  const prompt = `You are an expert English vocabulary tutor for advanced Korean learners. From the text below, extract ALL of the following — be thorough and do not skip any:
+
+1. Advanced vocabulary — C1/C2 level words that non-native speakers may not know
+2. Idioms — fixed phrases with non-literal or figurative meaning
+3. Expressions & collocations — natural phrases, set expressions, phrasal verbs
+4. Terminology — domain-specific or academic terms (literary, political, philosophical, scientific, etc.)
+5. Tech jargon — technical or industry-specific language, buzzwords, acronyms
 
 For each item return a JSON array. Each object must have:
-- "word": the word, idiom, or expression
-- "type": one of "vocab", "idiom", or "expression"
-- "definition": clear, concise definition (1-2 sentences)
-- "example": a new example sentence (not from the text)
+- "word": the word, idiom, expression, or term (exact form as used in text)
+- "type": one of "vocab", "idiom", "expression", "terminology", "jargon"
+- "definition": clear, concise definition in English (1-2 sentences)
+- "korean": Korean translation and explanation (한국어로 뜻과 간단한 설명)
+- "example": a new natural example sentence (NOT copied from the text)
+
+Be generous — extract everything a Korean English learner would benefit from knowing. Do not skip rare words, domain terms, or subtle expressions.
 
 Return ONLY the JSON array, no other text.
 
@@ -479,7 +513,7 @@ ${text}
 """`;
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
@@ -502,11 +536,11 @@ function renderResults(items) {
   const area = document.getElementById('resultsArea');
   if (!items.length) { area.innerHTML = '<p style="color:var(--ink3);font-size:14px;text-align:center;padding:20px">No advanced vocabulary found. Try a longer text.</p>'; return; }
 
-  const activeSource = document.querySelector('.source-tab.active').textContent.includes('Instagram') ? 'Instagram' : 'Article';
+  const activeSource = document.getElementById('src-article').classList.contains('active') ? 'Article' : 'Instagram';
 
   area.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Found <strong style="color:var(--ink)">${items.length} items</strong> — tap + to save</div>`;
   items.forEach((item, i) => {
-    const badge = item.type === 'idiom' ? 'badge-idiom' : item.type === 'expression' ? 'badge-expression' : 'badge-vocab';
+    const badge = {idiom:'badge-idiom',expression:'badge-expression',terminology:'badge-terminology',jargon:'badge-jargon'}[item.type] || 'badge-vocab';
     const div = document.createElement('div');
     div.className = 'result-item';
     div.innerHTML = `
@@ -516,6 +550,7 @@ function renderResults(items) {
       </div>
       <div class="definition">${item.definition}</div>
       <div class="example">"${item.example}"</div>
+      ${item.korean ? `<div style="font-size:12px;color:var(--ink3);margin-top:6px;padding-top:6px;border-top:1px solid var(--paper3);">🇰🇷 ${item.korean}</div>` : ''}
       <button class="add-btn" id="addbtn-${i}" onclick="addItem(${i}, this, ${JSON.stringify(item).replace(/"/g,'&quot;')}, '${activeSource}')">＋</button>
     `;
     area.appendChild(div);
@@ -547,11 +582,12 @@ function renderLibrary() {
     return;
   }
   list.innerHTML = filtered.map(v => {
-    const badge = v.type === 'idiom' ? 'badge-idiom' : v.type === 'expression' ? 'badge-expression' : 'badge-vocab';
+    const badge = {idiom:'badge-idiom',expression:'badge-expression',terminology:'badge-terminology',jargon:'badge-jargon'}[v.type] || 'badge-vocab';
     return `<div class="vocab-card">
       <span class="vc-word">${v.word}</span>
       <span class="type-badge ${badge}" style="font-size:10px;vertical-align:middle;margin-left:6px;">${v.type}</span>
       <div class="vc-def">${v.definition}</div>
+      ${v.korean ? `<div style="font-size:12px;color:var(--ink3);margin-top:4px;padding-top:5px;border-top:1px solid var(--paper3);">🇰🇷 ${v.korean}</div>` : ''}
       <div class="vc-example" style="font-size:12px;color:var(--ink3);margin-top:5px;font-style:italic;">"${v.example}"</div>
       <div class="vc-source">📌 ${v.source} · ${v.date}</div>
       <button class="vc-del" onclick="deleteItem(${v.id}, event)">✕</button>
@@ -712,6 +748,7 @@ function showResults() {
 
 // ─── UTILS ───
 function save() { localStorage.setItem('vl_vocab', JSON.stringify(vocab)); }
+function saveLinks() { localStorage.setItem('vl_links', JSON.stringify(links)); }
 function updateCount() {
   const n = vocab.length;
   document.getElementById('navCount').textContent = n + (n === 1 ? ' word' : ' words');
@@ -720,6 +757,56 @@ function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ─── LINKS ───
+function saveLink() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) { showToast('Paste a URL first'); return; }
+  if (links.find(l => l.url === url)) { showToast('Already saved'); return; }
+  const title = url.replace(/https?:\/\/(www\.)?/, '').split('/').filter(Boolean)[0] || url;
+  links.unshift({ id: Date.now(), url, title, date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) });
+  saveLinks();
+  showToast('🔖 Link saved');
+}
+
+function renderLinks() {
+  const list = document.getElementById('linksList');
+  if (!links.length) {
+    list.innerHTML = `<div class="empty-state"><div class="e-icon">🔖</div><p>No links saved yet.<br>Go to Add → Article and tap<br>"Save link to Links tab".</p></div>`;
+    return;
+  }
+  list.innerHTML = links.map(l => `
+    <div class="vocab-card" style="cursor:default;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;color:var(--ink3);margin-bottom:4px;">${l.date}</div>
+          <div style="font-size:14px;color:var(--ink2);word-break:break-all;line-height:1.5;">
+            <a href="${l.url}" target="_blank" style="color:var(--accent);text-decoration:none;">${l.url}</a>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+          <button class="vc-del" style="position:static;" onclick="deleteLink(${l.id}, event)">✕</button>
+          <button style="background:var(--paper2);border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;color:var(--ink2);" onclick="loadLinkToExtract('${l.url}')">Extract</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function deleteLink(id, e) {
+  e.stopPropagation();
+  links = links.filter(l => l.id !== id);
+  saveLinks();
+  renderLinks();
+  showToast('Link removed');
+}
+
+function loadLinkToExtract(url) {
+  switchTab('add');
+  switchSource('article');
+  document.getElementById('urlInput').value = url;
+  showToast('URL loaded — tap Extract');
 }
 </script>
 </body>
