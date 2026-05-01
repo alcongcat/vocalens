@@ -398,24 +398,29 @@ async function extractVocab() {
 
   document.getElementById('loadingText').textContent = 'Extracting vocabulary…';
 
-  const prompt = `You are an expert English vocabulary tutor for advanced Korean learners. From the text below, extract ALL of the following — be thorough and do not skip any:
+  const prompt = `You are an expert English vocabulary tutor specializing in literary criticism, humanities, and academic writing. Analyze the text below with the depth of a university professor.
 
-1. Advanced vocabulary — C1/C2 level words that non-native speakers may not know
-2. Idioms — fixed phrases with non-literal or figurative meaning
-3. Expressions & collocations — natural phrases, set expressions, phrasal verbs
-4. Terminology — domain-specific or academic terms (literary, political, philosophical, scientific, etc.)
-5. Tech jargon — technical or industry-specific language, buzzwords, acronyms
+Extract sophisticated, advanced items and classify each into EXACTLY one of these 5 types:
+- "vocab": advanced C1/C2 single words (e.g. simulacrum, insidious, precarity, circumlocutory)
+- "idiom": figurative fixed phrases with non-literal meaning (e.g. "lay bare", "take at face value")
+- "expression": natural collocations, phrasal verbs, set expressions (e.g. "against all odds", "a tissue of citations")
+- "terminology": academic, literary, philosophical, or domain-specific terms (e.g. ekphrasis, metafictional, apoliticality, universalism)
+- "jargon": technical or industry-specific language (e.g. large language model, fine-tuning, token)
 
-For each item return a JSON array. Each object must have:
-- "word": the word, idiom, expression, or term (exact form as used in text)
-- "type": one of "vocab", "idiom", "expression", "terminology", "jargon"
-- "definition": clear, concise definition in English (1-2 sentences)
-- "korean": Korean translation and explanation (한국어로 뜻과 간단한 설명)
-- "example": a new natural example sentence (NOT copied from the text)
+Rules:
+- Do NOT include common or basic words
+- Be as thorough as Gemini or GPT-4 — extract every sophisticated item
+- Focus on words a highly educated non-native speaker would find challenging
+- Include literary/critical terms, philosophical concepts, institutional language, and rhetorical devices
 
-Be generous — extract everything a Korean English learner would benefit from knowing. Do not skip rare words, domain terms, or subtle expressions.
+Return a JSON array only. Each object must have:
+- "word": exact word or phrase (include part of speech in brackets, e.g. "simulacrum (n.)")
+- "type": one of exactly "vocab", "idiom", "expression", "terminology", "jargon"
+- "definition": precise, intellectually rich English definition (1-2 sentences)
+- "korean": 한국어로 뜻과 간단한 설명
+- "example": a sophisticated new example sentence in the same register as the source text
 
-Return ONLY the JSON array, no other text.
+No markdown, no explanation — raw JSON array only.
 
 Text:
 """
