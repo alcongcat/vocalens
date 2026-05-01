@@ -136,9 +136,12 @@
 
 <nav>
   <div class="logo">Vocab<span>Lens</span></div>
-  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
-    <div class="nav-count" id="navCount">0 words</div>
-    <div id="reqCount" style="font-size:11px;color:var(--ink3);"></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button id="syncBtn" onclick="syncData()" title="Sync with Google Sheets" style="background:none;border:none;cursor:pointer;font-size:18px;padding:2px;color:var(--ink3);line-height:1;">☁️</button>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+      <div class="nav-count" id="navCount">0 words</div>
+      <div id="reqCount" style="font-size:11px;color:var(--ink3);"></div>
+    </div>
   </div>
 </nav>
 
@@ -272,6 +275,9 @@ let links = JSON.parse(localStorage.getItem('vl_links') || '[]');
 // ═══════════════════════════════════════════
 // 🔑 GROQ API KEY
 const GROQ_API_KEY = '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';
+// ═══════════════════════════════════════════
+// ☁️ PASTE YOUR GOOGLE APPS SCRIPT URL HERE
+const SYNC_URL = 'YOUR_SCRIPT_URL_HERE';
 // ═══════════════════════════════════════════
 let currentFilter = 'all';
 let quizType = 'definition';
@@ -653,8 +659,14 @@ function showResults() {
 }
 
 // ─── UTILS ───
-function save() { localStorage.setItem('vl_vocab', JSON.stringify(vocab)); }
-function saveLinks() { localStorage.setItem('vl_links', JSON.stringify(links)); }
+function save() {
+  localStorage.setItem('vl_vocab', JSON.stringify(vocab));
+  scheduleSyncPush();
+}
+function saveLinks() {
+  localStorage.setItem('vl_links', JSON.stringify(links));
+  scheduleSyncPush();
+}
 function updateCount() {
   const n = vocab.length;
   document.getElementById('navCount').textContent = n + (n===1?' word':' words');
@@ -664,6 +676,96 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2200);
 }
+
+// ─── SYNC ───
+let syncTimer = null;
+
+function scheduleSyncPush() {
+  if (!SYNC_URL || SYNC_URL === 'YOUR_SCRIPT_URL_HERE') return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushToSheet, 2000);
+}
+
+async function pushToSheet() {
+  if (!SYNC_URL || SYNC_URL === 'YOUR_SCRIPT_URL_HERE') return;
+  try {
+    await fetch(SYNC_URL, {
+      method: 'POST',
+      body: JSON.stringify({ vocab, links }),
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    setSyncStatus('✓ synced', false);
+  } catch(e) {
+    setSyncStatus('sync failed', true);
+  }
+}
+
+async function pullFromSheet() {
+  if (!SYNC_URL || SYNC_URL === 'YOUR_SCRIPT_URL_HERE') return;
+  try {
+    const res = await fetch(SYNC_URL + '?t=' + Date.now());
+    const data = await res.json();
+    if (data.vocab && data.vocab.length > vocab.length) {
+      vocab = data.vocab;
+      links = data.links || links;
+      localStorage.setItem('vl_vocab', JSON.stringify(vocab));
+      localStorage.setItem('vl_links', JSON.stringify(links));
+      updateCount();
+      showToast(`☁️ Synced — ${vocab.length} words loaded`);
+    }
+  } catch(e) {}
+}
+
+async function syncData() {
+  if (!SYNC_URL || SYNC_URL === 'YOUR_SCRIPT_URL_HERE') {
+    showToast('Add your Script URL to the file first');
+    return;
+  }
+  const btn = document.getElementById('syncBtn');
+  btn.textContent = '🔄';
+  setSyncStatus('syncing…', false);
+  try {
+    // Pull first, merge, then push
+    const res = await fetch(SYNC_URL + '?t=' + Date.now());
+    const remote = await res.json();
+    if (remote.vocab) {
+      const remoteIds = new Set(remote.vocab.map(v => v.id));
+      const localOnly = vocab.filter(v => !remoteIds.has(v.id));
+      vocab = [...remote.vocab, ...localOnly];
+      links = remote.links || links;
+      localStorage.setItem('vl_vocab', JSON.stringify(vocab));
+      localStorage.setItem('vl_links', JSON.stringify(links));
+      updateCount();
+    }
+    await fetch(SYNC_URL, {
+      method: 'POST',
+      body: JSON.stringify({ vocab, links }),
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    setSyncStatus('✓ synced', false);
+    showToast(`☁️ Sync complete — ${vocab.length} words`);
+    renderLibrary();
+  } catch(e) {
+    setSyncStatus('sync failed', true);
+    showToast('Sync failed: ' + e.message);
+  } finally {
+    btn.textContent = '☁️';
+  }
+}
+
+function setSyncStatus(msg, isError) {
+  const el = document.getElementById('reqCount');
+  const current = el.textContent;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--red)' : 'var(--green)';
+  setTimeout(() => {
+    updateReqCount();
+    el.style.color = 'var(--ink3)';
+  }, 3000);
+}
+
+// Pull on load if sync is configured
+if (SYNC_URL && SYNC_URL !== 'YOUR_SCRIPT_URL_HERE') pullFromSheet();
 
 // ─── PRONUNCIATION ───
 function speak(word) {
