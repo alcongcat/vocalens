@@ -163,8 +163,9 @@
 
   <div id="instagram-hint" style="background:var(--paper2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink2);line-height:1.5;">
     <strong style="display:block;margin-bottom:4px;">How to add from Instagram:</strong>
-    1. Open post → tap ··· → <em>Copy</em> the caption<br>
-    2. Paste it below and tap Extract
+    1. Open the post → tap <strong>···</strong> → tap <strong>Copy</strong> on the caption text<br>
+    2. Paste the caption text below → tap Extract<br>
+    <span style="color:var(--ink3);font-size:12px;">⚠️ Paste the caption text, not the post URL</span>
   </div>
 
   <div id="article-hint" style="display:none;background:var(--paper2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink2);line-height:1.5;">
@@ -277,7 +278,7 @@ let links = JSON.parse(localStorage.getItem('vl_links') || '[]');
 const GROQ_API_KEY = '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';
 // ═══════════════════════════════════════════
 // ☁️ PASTE YOUR GOOGLE APPS SCRIPT URL HERE
-const SYNC_URL = 'https://script.google.com/macros/s/AKfycbz0lOQe1GdVo6VSdQd94NyW6t1r9tW9aj3BxPCsjMcmrEdyDJHdgt_iKgZZY8iAWk0T4A/exec';
+const SYNC_URL = 'YOUR_SCRIPT_URL_HERE';
 // ═══════════════════════════════════════════
 let currentFilter = 'all';
 let quizType = 'definition';
@@ -400,6 +401,26 @@ async function extractVocab() {
       document.getElementById('loadingText').classList.remove('active');
       return;
     }
+    // Detect if user pasted a URL instead of caption text
+    if (/^https?:\/\//i.test(textToProcess)) {
+      showToast('Please paste the caption text, not the URL');
+      document.getElementById('loadingBar').classList.remove('active');
+      document.getElementById('loadingText').classList.remove('active');
+      return;
+    }
+    // Clean up Instagram-specific noise
+    textToProcess = textToProcess
+      .replace(/#\w+/g, '')           // remove hashtags
+      .replace(/@\w+/g, '')           // remove mentions
+      .replace(/https?:\/\/\S+/g, '') // remove any URLs
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '') // remove emojis
+      .replace(/\s+/g, ' ').trim();
+    if (textToProcess.length < 5) {
+      showToast('Text too short — paste more content');
+      document.getElementById('loadingBar').classList.remove('active');
+      document.getElementById('loadingText').classList.remove('active');
+      return;
+    }
   }
 
   document.getElementById('loadingText').textContent = 'Extracting vocabulary…';
@@ -424,6 +445,8 @@ STRICT RULES:
 
 Return ONLY a raw JSON array. Each object: { "word", "type", "definition", "korean", "example" }
 No markdown, no explanation.
+
+If the text is a short list of words or phrases, treat each one as an item to extract and explain directly — do not say "no vocabulary found".
 
 Text:
 """
@@ -475,6 +498,9 @@ function renderResults(items) {
   const activeSource = document.getElementById('src-article').classList.contains('active') ? 'Article' : 'Instagram';
   area.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Found <strong style="color:var(--ink)">${items.length} items</strong> — tap + to save</div>`;
   items.forEach((item, i) => {
+    // Normalise korean field — model sometimes uses different key names
+    const korean = item.korean || item.korean_explanation || item.korean_translation || item.kr || '';
+    item.korean = korean;
     const badge = {idiom:'badge-idiom',expression:'badge-expression',terminology:'badge-terminology',jargon:'badge-jargon'}[item.type] || 'badge-vocab';
     const div = document.createElement('div');
     div.className = 'result-item';
@@ -486,7 +512,7 @@ function renderResults(items) {
       </div>
       <div class="definition">${item.definition}</div>
       <div class="example">"${item.example}"</div>
-      ${item.korean ? `<div style="font-size:12px;color:var(--ink3);margin-top:6px;padding-top:6px;border-top:1px solid var(--paper3);">🇰🇷 ${item.korean}</div>` : ''}
+      ${korean ? `<div style="font-size:12px;color:var(--ink3);margin-top:6px;padding-top:6px;border-top:1px solid var(--paper3);">🇰🇷 ${korean}</div>` : '<div style="font-size:12px;color:#e2a020;margin-top:6px;">🇰🇷 Korean explanation unavailable</div>'}
       <button class="add-btn" id="addbtn-${i}" onclick="addItem(${i}, this, ${JSON.stringify(item).replace(/"/g,'&quot;')}, '${activeSource}')">＋</button>
     `;
     area.appendChild(div);
@@ -495,6 +521,15 @@ function renderResults(items) {
 
 function addItem(i, btn, item, source) {
   if (btn.classList.contains('added')) return;
+  // Check for duplicate — same word (case-insensitive)
+  const clean = item.word.replace(/\(.*?\)/g,'').trim().toLowerCase();
+  const duplicate = vocab.find(v => v.word.replace(/\(.*?\)/g,'').trim().toLowerCase() === clean);
+  if (duplicate) {
+    btn.textContent = '✓';
+    btn.classList.add('added');
+    showToast(`"${item.word}" already in library`);
+    return;
+  }
   const entry = { ...item, id: Date.now() + i, source, date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'}) };
   vocab.push(entry);
   save();
