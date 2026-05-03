@@ -157,16 +157,11 @@
 
   <div class="field-label">Source</div>
   <div class="source-tabs">
-    <div class="source-tab active" onclick="switchSource('instagram')" id="src-instagram">📸 Instagram</div>
+    <div class="source-tab active" onclick="switchSource('instagram')" id="src-instagram">📝 Text</div>
     <div class="source-tab" onclick="switchSource('article')" id="src-article">📰 Article</div>
   </div>
 
-  <div id="instagram-hint" style="background:var(--paper2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink2);line-height:1.5;">
-    <strong style="display:block;margin-bottom:4px;">How to add from Instagram:</strong>
-    1. Open the post → tap <strong>···</strong> → tap <strong>Copy</strong> on the caption text<br>
-    2. Paste the caption text below → tap Extract<br>
-    <span style="color:var(--ink3);font-size:12px;">⚠️ Paste the caption text, not the post URL</span>
-  </div>
+  <div id="instagram-hint" style="display:none;"></div>
 
   <div id="article-hint" style="display:none;background:var(--paper2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--ink2);line-height:1.5;">
     <strong style="display:block;margin-bottom:4px;">Paste an article URL:</strong>
@@ -178,7 +173,7 @@
   <div id="saveLinkRow" style="display:none;margin-top:8px;margin-bottom:4px;">
     <button class="btn btn-ghost" style="margin-top:0;width:100%;" onclick="saveLink()">🔖 Save link to Links tab</button>
   </div>
-  <textarea class="input-field" id="textInput" placeholder="Paste Instagram caption here…"></textarea>
+  <textarea class="input-field" id="textInput" placeholder="Paste any text here — article excerpt, caption, essay, dialogue…"></textarea>
 
   <div style="margin-top:12px;">
     <button class="btn btn-primary" onclick="extractVocab()">
@@ -333,7 +328,7 @@ function switchSource(s) {
   document.querySelectorAll('.source-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('src-' + s).classList.add('active');
   const isArticle = s === 'article';
-  document.getElementById('instagram-hint').style.display = isArticle ? 'none' : 'block';
+  document.getElementById('instagram-hint').style.display = 'none';
   document.getElementById('article-hint').style.display = isArticle ? 'block' : 'none';
   document.getElementById('urlInput').style.display = isArticle ? 'block' : 'none';
   document.getElementById('saveLinkRow').style.display = isArticle ? 'block' : 'none';
@@ -408,7 +403,7 @@ async function extractVocab() {
       document.getElementById('loadingText').classList.remove('active');
       return;
     }
-    // Clean up Instagram-specific noise
+    // Clean up common text noise (hashtags, mentions, URLs, emojis)
     textToProcess = textToProcess
       .replace(/#\w+/g, '')           // remove hashtags
       .replace(/@\w+/g, '')           // remove mentions
@@ -425,7 +420,8 @@ async function extractVocab() {
 
   document.getElementById('loadingText').textContent = 'Extracting vocabulary…';
 
-  const prompt = `You are a Cambridge English C1/C2 proficiency examiner and literary scholar. Analyze the text below with extreme rigour.
+  const prompt = isArticle
+    ? `You are a Cambridge English C1/C2 proficiency examiner and literary scholar. Analyze the text below with extreme rigour.
 
 EXTRACT ONLY items that meet C1/C2 standard. Reject anything a B2 learner would already know.
 
@@ -447,6 +443,29 @@ Return ONLY a raw JSON array. Each object: { "word", "type", "definition", "kore
 No markdown, no explanation.
 
 If the text is a short list of words or phrases, treat each one as an item to extract and explain directly — do not say "no vocabulary found".
+
+Text:
+"""
+${textToProcess}
+"""`
+    : `You are an expert English language teacher and vocabulary coach. Analyze the text below and extract ALL useful vocabulary items — words, idioms, expressions, and terms that a learner would benefit from knowing, regardless of their English level.
+
+CATEGORIES (use exactly these type values):
+- "vocab": Any word worth learning — not just advanced ones. Include anything from B1 level and above. Think: persevere, resilient, mundane, candid, leverage, nuance, reluctant, inevitable, subtle, mutter, dread. NOT: the, go, big, say, very.
+- "idiom": Fixed figurative phrases at any level. Think: "break the ice", "on the fence", "hit the nail on the head", "lay bare", "against all odds", "give it a shot". NOT: "a lot of", "in order to".
+- "expression": Useful collocations, set phrases, or natural-sounding multi-word expressions. Think: "make a point of", "take for granted", "in the long run", "bear in mind", "it goes without saying". NOT: "and also", "very much".
+- "terminology": Topic-specific terms tied to the subject of the text. Think: algorithm, metabolism, sovereignty, gentrification, blockchain, inflation. NOT: paragraph, thing, topic.
+
+DO NOT include a "jargon" category at all.
+
+RULES:
+- Extract generously — aim for 15–30 items minimum
+- Include a healthy mix of levels: some accessible (B1/B2), some more challenging (C1/C2)
+- Part of speech required in brackets: persevere (v.), resilient (adj.), break the ice (v. phr.)
+- If the text is a short list of words or phrases, treat each one as an item to explain directly — do not say "no vocabulary found"
+
+Return ONLY a raw JSON array. Each object: { "word", "type", "definition", "korean", "example" }
+No markdown, no explanation.
 
 Text:
 """
@@ -495,7 +514,7 @@ function renderResults(items) {
     area.innerHTML = '<p style="color:var(--ink3);font-size:14px;text-align:center;padding:20px">No advanced vocabulary found. Try a longer text.</p>';
     return;
   }
-  const activeSource = document.getElementById('src-article').classList.contains('active') ? 'Article' : 'Instagram';
+  const activeSource = document.getElementById('src-article').classList.contains('active') ? 'Article' : 'Text';
   area.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Found <strong style="color:var(--ink)">${items.length} items</strong> — tap + to save</div>`;
   items.forEach((item, i) => {
     // Normalise korean field — model sometimes uses different key names
