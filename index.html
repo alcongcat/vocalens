@@ -149,6 +149,7 @@
   <button class="tab active" onclick="switchTab('add')">＋ Add</button>
   <button class="tab" onclick="switchTab('library')">Library</button>
   <button class="tab" onclick="switchTab('quiz')">Quiz</button>
+  <button class="tab" onclick="switchTab('idioms')">Idioms</button>
   <button class="tab" onclick="switchTab('links')">Links</button>
 </div>
 
@@ -256,6 +257,31 @@
   </div>
 </div>
 
+<!-- ═══════════════ IDIOMS SCREEN ═══════════════ -->
+<div class="screen" id="screen-idioms">
+
+  <!-- Category filter -->
+  <div class="filter-row" id="idiomFilterRow">
+    <div class="filter-chip active" onclick="setIdiomFilter('all', this)">All</div>
+    <div class="filter-chip" onclick="setIdiomFilter('spoken', this)">Spoken</div>
+    <div class="filter-chip" onclick="setIdiomFilter('written', this)">Written</div>
+    <div class="filter-chip" onclick="setIdiomFilter('both', this)">Both</div>
+  </div>
+
+  <!-- Generate button row -->
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+    <button class="btn btn-primary" style="flex:1;margin:0;" onclick="generateIdioms()">
+      <span>✨</span> Suggest idioms
+    </button>
+    <button onclick="refreshIdioms()" title="Get new suggestions" style="width:44px;height:44px;border-radius:12px;background:var(--paper2);border:1.5px solid var(--paper3);font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">🔄</button>
+  </div>
+
+  <div class="loading-bar" id="idiomLoadingBar"><div class="loading-bar-inner"></div></div>
+  <div class="loading-text" id="idiomLoadingText">Finding idioms…</div>
+
+  <div id="idiomResults"></div>
+</div>
+
 <!-- ═══════════════ LINKS SCREEN ═══════════════ -->
 <div class="screen" id="screen-links">
   <div id="linksList"></div>
@@ -269,8 +295,10 @@ let vocab = JSON.parse(localStorage.getItem('vl_vocab') || '[]');
 let links = JSON.parse(localStorage.getItem('vl_links') || '[]');
 
 // ═══════════════════════════════════════════
-// 🔑 GROQ API KEY
-const GROQ_API_KEY = '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';
+// ☁️ SUPABASE CONFIG — paste your values here
+const SUPABASE_URL = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const GROQ_PROXY_URL = `${SUPABASE_URL}/functions/v1/groq-proxy`;
 // ═══════════════════════════════════════════
 // ☁️ PASTE YOUR GOOGLE APPS SCRIPT URL HERE
 const SYNC_URL = 'https://script.google.com/macros/s/AKfycbz0lOQe1GdVo6VSdQd94NyW6t1r9tW9aj3BxPCsjMcmrEdyDJHdgt_iKgZZY8iAWk0T4A/exec';
@@ -314,13 +342,14 @@ updateReqCount();
 // ─── TABS ───
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    t.classList.toggle('active', ['add','library','quiz','links'][i] === name);
+    t.classList.toggle('active', ['add','library','quiz','idioms','links'][i] === name);
   });
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   if (name === 'library') renderLibrary();
   if (name === 'quiz') showQuizSetup();
   if (name === 'links') renderLinks();
+  if (name === 'idioms') initIdiomsTab();
 }
 
 // ─── SOURCE TABS ───
@@ -338,8 +367,8 @@ function switchSource(s) {
 
 // ─── EXTRACT ───
 async function extractVocab() {
-  if (!GROQ_API_KEY || GROQ_API_KEY === 'YOUR_GROQ_KEY_HERE') {
-    showToast('Please add your Groq API key to the file'); return;
+  if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT_REF')) {
+    showToast('Please add your Supabase URL to the file'); return;
   }
 
   const isArticle = document.getElementById('src-article').classList.contains('active');
@@ -477,9 +506,9 @@ ${textToProcess}
     let result = null;
     for (const model of ['openai/gpt-oss-120b', 'moonshotai/kimi-k2-instruct', 'llama-3.3-70b-versatile']) {
       try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const res = await fetch(GROQ_PROXY_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+          headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
           body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 4000 })
         });
         const data = await res.json();
@@ -933,6 +962,233 @@ function loadLinkToExtract(url) {
   switchSource('article');
   document.getElementById('urlInput').value = url;
   showToast('URL loaded — tap Extract');
+}
+
+// ═══════════════════════════════════════════
+// 💬 IDIOMS TAB
+// ═══════════════════════════════════════════
+
+let idiomFilter = 'all';
+let idiomCache = []; // cached from last generation
+let idiomShown = []; // currently displayed subset
+let idiomUsedThisSession = new Set(); // avoid repeats in a session
+
+const IDIOM_PROMPTS = {
+  all: `You are a native English language expert. Generate 12 vivid, genuinely useful idioms that educated native English speakers actually use in real life — in conversations, writing, podcasts, books, and journalism. Avoid clichés that learners already know (like "break the ice" or "hit the road"). Focus on idioms that are nuanced, interesting, and slightly surprising.
+
+Include a mix:
+- Some for casual spoken English (texting, talking with friends, casual meetings)
+- Some for professional/written English (emails, reports, journalism, essays)
+- Clearly mark each with "usage": "spoken", "written", or "both"
+
+For each idiom return:
+{
+  "idiom": "the full phrase (v. phr. / n. phr. etc.)",
+  "meaning": "plain English definition, 1-2 sentences",
+  "example_spoken": "a natural conversational example sentence",
+  "example_written": "a formal or written-context example sentence",
+  "usage": "spoken" | "written" | "both",
+  "register": "casual" | "neutral" | "formal",
+  "tip": "a short native-speaker insight — when to use it, what it implies, common mistakes learners make, or a subtle nuance"
+}
+
+Return ONLY a raw JSON array of 12 objects. No markdown, no explanation.`,
+
+  spoken: `You are a native English language expert. Generate 12 idioms and expressions that native English speakers actually say out loud — in casual conversation, over the phone, in meetings, on podcasts, with friends or colleagues. These should sound natural when spoken, not stiff or bookish.
+
+Think: expressions you'd hear on a Netflix show, in a podcast, in an office, or at dinner. Avoid overly literary or formal phrases.
+
+For each idiom return:
+{
+  "idiom": "the full phrase",
+  "meaning": "plain English definition",
+  "example_spoken": "a natural conversational example",
+  "example_written": "how it might appear in an informal email or message",
+  "usage": "spoken",
+  "register": "casual" | "neutral",
+  "tip": "native speaker note — tone, context, what it signals socially"
+}
+
+Return ONLY a raw JSON array of 12 objects. No markdown, no explanation.`,
+
+  written: `You are a native English language expert. Generate 12 idioms and expressions used by skilled writers — journalists, essayists, novelists, academics, and professionals in formal writing like reports and emails.
+
+These should be phrases that elevate writing: precise, vivid, non-clichéd. Think: The Economist, The Atlantic, literary fiction, op-eds, well-crafted business emails.
+
+For each idiom return:
+{
+  "idiom": "the full phrase",
+  "meaning": "plain English definition",
+  "example_spoken": "how a fluent speaker might say it informally",
+  "example_written": "a polished written-context example",
+  "usage": "written",
+  "register": "neutral" | "formal",
+  "tip": "writer's note — what effect it has, when skilled writers reach for it"
+}
+
+Return ONLY a raw JSON array of 12 objects. No markdown, no explanation.`,
+
+  both: `You are a native English language expert. Generate 12 versatile idioms that work equally well in spoken and written English — phrases educated native speakers use both in conversation and in writing, naturally and without sounding out of place in either context.
+
+Think: expressions a journalist uses in an article AND in a conversation. Phrases from quality non-fiction, interviews, documentaries.
+
+For each idiom return:
+{
+  "idiom": "the full phrase",
+  "meaning": "plain English definition",
+  "example_spoken": "a natural conversational example",
+  "example_written": "a polished written-context example",
+  "usage": "both",
+  "register": "casual" | "neutral" | "formal",
+  "tip": "native speaker note on why it works in both contexts"
+}
+
+Return ONLY a raw JSON array of 12 objects. No markdown, no explanation.`
+};
+
+const REGISTER_LABELS = { casual: '💬 Casual', neutral: '🗣 Neutral', formal: '✍️ Formal' };
+const USAGE_LABELS = { spoken: '🎙 Spoken', written: '📝 Written', both: '🔄 Both' };
+const USAGE_COLORS = { spoken: '#fff3ee', written: '#eef3ff', both: '#f0f8f0' };
+const USAGE_BORDER = { spoken: '#f5d5c0', written: '#c8d8f5', both: '#b8dfc0' };
+
+function setIdiomFilter(f, el) {
+  idiomFilter = f;
+  document.querySelectorAll('#idiomFilterRow .filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  // If we have cached results for this filter, just re-render
+  // Otherwise prompt to generate
+  if (idiomCache.length && idiomCache[0]._filter === f) {
+    renderIdioms(idiomCache);
+  } else {
+    document.getElementById('idiomResults').innerHTML =
+      `<div class="empty-state"><div class="e-icon">💬</div><p>Tap <strong>Suggest idioms</strong><br>to get ${f === 'all' ? 'a mix of' : f} idioms.</p></div>`;
+  }
+}
+
+function initIdiomsTab() {
+  if (!idiomCache.length) {
+    document.getElementById('idiomResults').innerHTML =
+      `<div class="empty-state"><div class="e-icon">💬</div><p>Tap <strong>Suggest idioms</strong> to discover<br>native-speaker expressions.</p></div>`;
+  }
+}
+
+async function generateIdioms() {
+  if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT_REF')) {
+    showToast('Please add your Supabase URL to the file'); return;
+  }
+  document.getElementById('idiomLoadingBar').classList.add('active');
+  document.getElementById('idiomLoadingText').classList.add('active');
+  document.getElementById('idiomResults').innerHTML = '';
+
+  const prompt = IDIOM_PROMPTS[idiomFilter];
+
+  try {
+    let result = null;
+    for (const model of ['openai/gpt-oss-120b', 'moonshotai/kimi-k2-instruct', 'llama-3.3-70b-versatile']) {
+      try {
+        const res = await fetch(GROQ_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
+          body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 4000 })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+        result = data.choices[0].message.content;
+        break;
+      } catch(e) { if (model === 'llama-3.3-70b-versatile') throw e; }
+    }
+    let raw = result.replace(/```json|```/g, '').trim();
+    const lastBrace = raw.lastIndexOf('}');
+    if (lastBrace !== -1 && !raw.trimEnd().endsWith(']')) raw = raw.slice(0, lastBrace + 1) + ']';
+    const items = JSON.parse(raw);
+    items.forEach(it => it._filter = idiomFilter);
+    idiomCache = items;
+    incrementRequestCount();
+    renderIdioms(items);
+  } catch(e) {
+    showToast('Error: ' + e.message);
+    document.getElementById('idiomResults').innerHTML = '';
+  } finally {
+    document.getElementById('idiomLoadingBar').classList.remove('active');
+    document.getElementById('idiomLoadingText').classList.remove('active');
+  }
+}
+
+function refreshIdioms() {
+  // Clear cache for this filter so generateIdioms fetches fresh
+  idiomCache = [];
+  generateIdioms();
+}
+
+function renderIdioms(items) {
+  const area = document.getElementById('idiomResults');
+  if (!items || !items.length) {
+    area.innerHTML = '<p style="text-align:center;color:var(--ink3);padding:20px;">No idioms found. Try again.</p>';
+    return;
+  }
+  area.innerHTML = `<div style="font-size:13px;color:var(--ink3);margin-bottom:14px;">${items.length} idioms — tap <strong style="color:var(--ink)">＋</strong> to save to Library</div>` +
+    items.map((item, i) => {
+      const usageBg = USAGE_COLORS[item.usage] || '#f5f5f5';
+      const usageBorder = USAGE_BORDER[item.usage] || '#ddd';
+      const savedAlready = vocab.some(v => v.word.toLowerCase().replace(/\s*\(.*\)/,'').trim() === item.idiom.toLowerCase().replace(/\s*\(.*\)/,'').trim());
+      return `
+      <div class="vocab-card" id="idiom-card-${i}" style="border-color:${usageBorder};background:${usageBg};margin-bottom:12px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <span style="font-family:'DM Serif Display',serif;font-size:19px;color:var(--ink);line-height:1.2;">${item.idiom}</span>
+              <span style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;background:var(--paper2);color:var(--ink3);">${USAGE_LABELS[item.usage] || item.usage}</span>
+              <span style="font-size:10px;padding:2px 7px;border-radius:20px;background:var(--paper3);color:var(--ink3);">${REGISTER_LABELS[item.register] || item.register}</span>
+            </div>
+            <div style="font-size:13px;color:var(--ink2);line-height:1.5;margin-bottom:8px;">${item.meaning}</div>
+
+            <div style="margin-bottom:8px;">
+              <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:3px;">🎙 Spoken</div>
+              <div style="font-size:13px;font-style:italic;color:var(--ink2);line-height:1.4;">"${item.example_spoken}"</div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:3px;">📝 Written</div>
+              <div style="font-size:13px;font-style:italic;color:var(--ink2);line-height:1.4;">"${item.example_written}"</div>
+            </div>
+
+            <div style="background:var(--paper);border-radius:8px;padding:9px 11px;font-size:12px;color:var(--ink3);line-height:1.5;border:1px solid var(--paper3);">
+              <strong style="color:var(--ink2);">💡 Native tip: </strong>${item.tip}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;margin-top:2px;">
+            <button onclick="speak('${item.idiom.replace(/'/g, "\\'")}')" style="width:30px;height:30px;border-radius:50%;background:var(--paper2);border:none;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">🔊</button>
+            <button id="idiom-add-${i}" onclick="addIdiomToLibrary(${i})" style="width:30px;height:30px;border-radius:50%;background:${savedAlready ? 'var(--green)' : 'var(--paper2)'};border:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:${savedAlready ? 'white' : 'inherit'};transition:all 0.2s;">${savedAlready ? '✓' : '＋'}</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function addIdiomToLibrary(i) {
+  const item = idiomCache[i];
+  if (!item) return;
+  const cleanWord = item.idiom.toLowerCase().replace(/\s*\(.*\)/,'').trim();
+  const duplicate = vocab.some(v => v.word.toLowerCase().replace(/\s*\(.*\)/,'').trim() === cleanWord);
+  if (duplicate) { showToast('Already in library'); return; }
+
+  const newWord = {
+    id: Date.now() + i,
+    word: item.idiom,
+    type: 'idiom',
+    definition: item.meaning,
+    korean: '',
+    example: item.example_spoken,
+    source: 'Idioms',
+    date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'})
+  };
+  vocab.unshift(newWord);
+  localStorage.setItem('vl_vocab', JSON.stringify(vocab));
+  updateCount();
+  scheduleSyncPush();
+
+  const btn = document.getElementById(`idiom-add-${i}`);
+  if (btn) { btn.textContent = '✓'; btn.style.background = 'var(--green)'; btn.style.color = 'white'; }
+  showToast('✓ Saved to Library');
 }
 </script>
 </body>
